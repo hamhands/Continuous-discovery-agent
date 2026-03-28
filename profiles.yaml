@@ -1,0 +1,172 @@
+# Outreach bot profiles — add a new top-level key under `profiles` for each team.
+#
+# capacity block — controls how send volume is determined:
+#   type: calendly   checks open interview slots; volume = slots × emails_per_slot
+#     event_slug         slug portion of the Calendly scheduling URL
+#     weekly_meeting_cap max bookings per week to count against
+#   type: fixed      no calendar check; volume = max_emails_per_run per batch
+#
+# outbound block — controls how emails are delivered:
+#   type: gmail          sends directly via Gmail SMTP (low volume, personal feel)
+#   type: activecampaign adds contacts to an AC list; AC handles the actual send
+#     (requires ACTIVECAMPAIGN_API_URL + ACTIVECAMPAIGN_API_KEY secrets)
+#
+# Other required keys:
+#   sheets_id            Google Sheet ID used for deduplication tracking
+#   sender.*             signature identity — name, pronouns, title, email
+#                        (only rendered for gmail outbound)
+#   batches[]            ordered list of email batches to run each cycle
+#     label              short identifier used in sheet tracking (e.g. "OB", "FT")
+#     emails_per_slot    emails per calendar slot — calendly capacity only
+#     max_emails_per_run hard ceiling per run (also the fixed-capacity volume)
+#     list_id            ActiveCampaign list ID — activecampaign outbound only
+#     query              BigQuery SQL; placeholders: {project}, {dataset}, {limit}
+#     subject            email subject — gmail outbound only
+#     body_text          plain-text body — gmail outbound only; supports {calendly_link}
+#     body_html          HTML body — gmail outbound only; supports {calendly_link}
+
+profiles:
+
+  # ── TTV (Time-to-Value) — Patrick Hammons ────────────────────────────────────
+  ttv:
+    capacity:
+      type: calendly
+      event_slug: "cxnk-s67-52t/customer-feedback-interview-ttv"
+      weekly_meeting_cap: 4
+
+    outbound:
+      type: gmail
+
+    sheets_id: "1_x-inyo31gaRXVcRiMDxndNZWF1dOcRJ5NmDnqYVTLU"
+
+    sender:
+      name: "Patrick Hammons"
+      pronouns: "He/Him"
+      title: "Product Manager"
+      email: "patrick.hammons@boldin.com"
+
+    batches:
+
+      - label: "OB"
+        # 50 emails per available slot — used as fallback rate when history is thin
+        # (interpreted as: 1-in-50 emails converts to a booking = 2% assumed rate)
+        emails_per_slot: 50
+        # Hard ceiling per run regardless of conversion rate calculation
+        max_emails_per_run: 500
+        query: |
+          SELECT
+            ad.email,
+            r.registered_at
+          FROM `{project}.{dataset}.dim_account_demographics` AS ad
+          JOIN `{project}.{dataset}.fct_registrations` AS r
+            ON ad.user_profile_id = r.user_profile_id
+          LEFT JOIN `{project}.{dataset}.fct_onboarded_users` AS o
+            ON ad.user_profile_id = o.user_profile_id
+          WHERE ad.tenant_type = 'Consumer'
+            AND o.user_profile_id IS NULL
+            AND DATE(r.registered_at) BETWEEN DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
+                                          AND DATE_SUB(CURRENT_DATE(), INTERVAL 5 DAY)
+            AND LOWER(ad.email) NOT LIKE '%deleted%'
+          ORDER BY RAND()
+          LIMIT {limit}
+        subject: "Quick question about getting started with Boldin"
+        body_text: |
+          Hi there,
+
+          I'm a product manager on the team that builds Boldin. I noticed you signed up recently and wanted to reach out.
+
+          We're working on making the getting-started experience simpler, and I'm talking with a few new users to understand what felt unclear or not worth the time early on.
+
+          If you're open to a quick 20–30 minute chat, we'll send a $50 Amazon or Target gift card as a thank you for your time.
+
+          👉 {calendly_link}
+
+          No preparation needed, just your honest experience. Either way, thanks for giving Boldin a try.
+        body_html: |
+          <p>Hi there,</p>
+          <p>I'm a product manager on the team that builds Boldin. I noticed you signed up recently and wanted to reach out.</p>
+          <p>We're working on making the getting-started experience simpler, and I'm talking with a few new users to understand what felt unclear or not worth the time early on.</p>
+          <p>If you're open to a quick 20–30 minute chat, we'll send a $50 Amazon or Target gift card as a thank you for your time.</p>
+          <p>👉 <a href="{calendly_link}">Book your time here.</a></p>
+          <p>No preparation needed, just your honest experience. Either way, thanks for giving Boldin a try.</p>
+
+      - label: "FT"
+        # 25 emails per available slot — used as fallback rate when history is thin
+        # (interpreted as: 1-in-25 emails converts to a booking = 4% assumed rate)
+        emails_per_slot: 25
+        # Hard ceiling per run regardless of conversion rate calculation
+        max_emails_per_run: 250
+        query: |
+          SELECT
+            ad.email,
+            r.registered_at
+          FROM `{project}.{dataset}.dim_account_demographics` AS ad
+          JOIN `{project}.{dataset}.fct_registrations` AS r
+            ON ad.user_profile_id = r.user_profile_id
+          JOIN `{project}.{dataset}.fct_onboarded_users` AS o
+            ON ad.user_profile_id = o.user_profile_id
+          WHERE ad.tenant_type = 'Consumer'
+            AND DATE(r.registered_at) BETWEEN DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+                                          AND DATE_SUB(CURRENT_DATE(), INTERVAL 14 DAY)
+            AND LOWER(ad.email) NOT LIKE '%deleted%'
+            AND NOT EXISTS (
+              SELECT 1
+              FROM `{project}.{dataset}.dim_subscriptions` AS s
+              WHERE s.user_profile_id = ad.user_profile_id
+                AND s.trial_started_at IS NOT NULL
+            )
+          ORDER BY RAND()
+          LIMIT {limit}
+        subject: "A quick question about your Boldin experience"
+        body_text: |
+          Hi there,
+
+          I'm a product manager on the team that builds Boldin. I noticed you recently finished setting up your plan and wanted to reach out.
+
+          We're working on improving how Boldin explains what to do next after setup, and I'm talking with a few people to understand what felt useful and what didn't feel worth going further with.
+
+          If you're open to a quick 20–30 minute chat, we'll send a $50 Amazon or Target gift card as a thank you for your time.
+
+          👉 {calendly_link}
+
+          No preparation needed, just your honest experience. Either way, thanks for taking the time to try Boldin.
+        body_html: |
+          <p>Hi there,</p>
+          <p>I'm a product manager on the team that builds Boldin. I noticed you recently finished setting up your plan and wanted to reach out.</p>
+          <p>We're working on improving how Boldin explains what to do next after setup, and I'm talking with a few people to understand what felt useful and what didn't feel worth going further with.</p>
+          <p>If you're open to a quick 20–30 minute chat, we'll send a $50 Amazon or Target gift card as a thank you for your time.</p>
+          <p>👉 <a href="{calendly_link}">Book your time here.</a></p>
+          <p>No preparation needed, just your honest experience. Either way, thanks for taking the time to try Boldin.</p>
+
+  # ── Example: marketing campaign using ActiveCampaign ─────────────────────────
+  # marketing_trial_nudge:
+  #   capacity:
+  #     type: fixed               # no calendar check — just send max_emails_per_run
+  #
+  #   outbound:
+  #     type: activecampaign      # pushes contacts into AC; AC sends the email
+  #
+  #   sheets_id: "YOUR_SHEET_ID"  # separate sheet for dedup tracking
+  #
+  #   sender:                     # not rendered for AC outbound; kept for reference
+  #     name: "Boldin Team"
+  #     title: "Marketing"
+  #     email: "hello@boldin.com"
+  #
+  #   batches:
+  #     - label: "TRIAL_NUDGE"
+  #       max_emails_per_run: 500
+  #       list_id: "42"           # AC list ID — adding a contact here triggers the AC automation
+  #       query: |
+  #         SELECT ad.email
+  #         FROM `{project}.{dataset}.dim_account_demographics` AS ad
+  #         JOIN `{project}.{dataset}.fct_onboarded_users` AS o
+  #           ON ad.user_profile_id = o.user_profile_id
+  #         WHERE ad.tenant_type = 'Consumer'
+  #           AND NOT EXISTS (
+  #             SELECT 1 FROM `{project}.{dataset}.dim_subscriptions` AS s
+  #             WHERE s.user_profile_id = ad.user_profile_id
+  #           )
+  #         ORDER BY RAND()
+  #         LIMIT {limit}
+  #       # subject / body_text / body_html not needed — copy lives in ActiveCampaign
