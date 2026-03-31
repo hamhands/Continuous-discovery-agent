@@ -1,0 +1,174 @@
+# Outreach agent profiles — add a new top-level key under `profiles` for each campaign.
+#
+# capacity block — controls how send volume is determined:
+#   type: calendly   checks open interview slots; volume = slots x emails_per_slot
+#     event_slug         slug portion of the Calendly scheduling URL
+#     weekly_meeting_cap max bookings per week to count against
+#   type: fixed      no calendar check; volume = max_emails_per_run per batch
+#
+# outbound block — controls how emails are delivered:
+#   type: gmail          sends directly via Gmail SMTP (low volume, personal feel)
+#   type: activecampaign adds contacts to an AC list; AC handles the actual send
+#     (requires ACTIVECAMPAIGN_API_URL + ACTIVECAMPAIGN_API_KEY env vars)
+#
+# Other required keys:
+#   sheets_id            Google Sheet ID used for deduplication tracking
+#   sender.*             signature identity — rendered in Gmail outbound only
+#     name               full name
+#     title              job title
+#     email              sender email address
+#     pronouns           optional — shown in signature if set
+#     company_name       optional — shown in signature
+#     company_url        optional — linked in signature
+#     logo_url           optional — URL to a company logo image (160px wide recommended)
+#   batches[]            ordered list of email batches to run each cycle
+#     label              short identifier used in sheet tracking (e.g. "OB", "FT")
+#     emails_per_slot    emails per calendar slot — calendly capacity only
+#     max_emails_per_run hard ceiling per run (also the fixed-capacity volume)
+#     list_id            ActiveCampaign list ID — activecampaign outbound only
+#     query              BigQuery SQL; placeholders: {project}, {dataset}, {limit}
+#     subject            email subject — gmail outbound only
+#     body_text          plain-text body — gmail outbound only; supports {calendly_link}
+#     body_html          HTML body — gmail outbound only; supports {calendly_link}
+
+profiles:
+
+  # ── Interview / discovery outreach ───────────────────────────────────────────
+  # Slot-gated: volume scales with open Calendly availability.
+  # Two batches target different behavioral milestones in your funnel.
+  interview_outreach:
+    capacity:
+      type: calendly
+      # Find this in your event's shareable Calendly link.
+      # The link looks like: https://calendly.com/d/abc-xyz/your-event-name
+      # Copy everything after /d/ — NOT your username, it's the hash path.
+      event_slug: "abc-xyz/your-event-name"
+      # Max bookings you want per week. Remaining capacity drives email volume.
+      weekly_meeting_cap: 4
+
+    outbound:
+      type: gmail
+
+    # Create a Google Sheet with columns: email | batch | booked
+    # Share it (Editor) with your GCP service account email.
+    sheets_id: "YOUR_GOOGLE_SHEET_ID"
+
+    sender:
+      name: "Your Name"
+      pronouns: "They/Them"        # optional — remove this line if you don't want pronouns shown
+      title: "Product Manager"
+      email: "you@yourcompany.com"
+      company_name: "Your Company" # optional — shown in email signature
+      company_url: "https://www.yourcompany.com" # optional — linked in signature
+      logo_url: ""                 # optional — paste a URL to your logo image (160px wide)
+
+    batches:
+
+      # Batch 1: Example — new signups who haven't completed onboarding.
+      # Replace the query, subject, and body with your own. These are just
+      # starter templates to show the format.
+      - label: "BATCH_A"
+        # Fallback emails-per-slot before you have 30+ sends of history.
+        # Adjust based on your expected response rate.
+        emails_per_slot: 50
+        max_emails_per_run: 500
+        query: |
+          SELECT u.email
+          FROM `{project}.{dataset}.YOUR_USERS_TABLE` AS u
+          WHERE
+            -- Define your target window
+            DATE(u.created_at) BETWEEN DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
+                                   AND DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY)
+            -- Define the milestone they haven't reached
+            AND NOT EXISTS (
+              SELECT 1 FROM `{project}.{dataset}.YOUR_MILESTONE_TABLE` AS m
+              WHERE m.user_id = u.id
+            )
+            -- Exclude internal/test accounts
+            AND LOWER(u.email) NOT LIKE '%@yourcompany.com'
+            AND LOWER(u.email) NOT LIKE '%test%'
+          ORDER BY RAND()
+          LIMIT {limit}
+        subject: "[Replace] Your subject line here"
+        body_text: |
+          [Replace this with your outreach email.]
+
+          Write it in your own voice. The agent sends exactly what you put here —
+          there's no AI rewriting step. Use {calendly_link} wherever you want the
+          booking link inserted.
+
+          {calendly_link}
+        body_html: |
+          <p>[Replace this with your outreach email in HTML.]</p>
+          <p>Write it in your own voice. The agent sends exactly what you put here —
+          there's no AI rewriting step. Use <code>{calendly_link}</code> wherever you want the
+          booking link inserted.</p>
+          <p><a href="{calendly_link}">Book a time here</a></p>
+
+      # Batch 2: Example — engaged users who dropped off before a second milestone.
+      # Same idea as above: replace query + copy with your own.
+      - label: "BATCH_B"
+        emails_per_slot: 25
+        max_emails_per_run: 250
+        query: |
+          SELECT u.email
+          FROM `{project}.{dataset}.YOUR_USERS_TABLE` AS u
+          WHERE
+            -- Reached milestone A
+            EXISTS (
+              SELECT 1 FROM `{project}.{dataset}.YOUR_MILESTONE_A_TABLE` AS a
+              WHERE a.user_id = u.id
+            )
+            -- But never reached milestone B
+            AND NOT EXISTS (
+              SELECT 1 FROM `{project}.{dataset}.YOUR_MILESTONE_B_TABLE` AS b
+              WHERE b.user_id = u.id
+            )
+            AND DATE(u.created_at) <= DATE_SUB(CURRENT_DATE(), INTERVAL 14 DAY)
+            AND LOWER(u.email) NOT LIKE '%@yourcompany.com'
+            AND LOWER(u.email) NOT LIKE '%test%'
+          ORDER BY RAND()
+          LIMIT {limit}
+        subject: "[Replace] Your subject line here"
+        body_text: |
+          [Replace this with your outreach email.]
+
+          {calendly_link}
+        body_html: |
+          <p>[Replace this with your outreach email in HTML.]</p>
+          <p><a href="{calendly_link}">Book a time here</a></p>
+
+  # ── Example: marketing campaign using ActiveCampaign ─────────────────────────
+  # Use this pattern for higher-volume sends where you want AC to handle
+  # deliverability, unsubscribes, and email sequencing.
+  #
+  # marketing_nudge:
+  #   capacity:
+  #     type: fixed               # no calendar check — just send max_emails_per_run
+  #
+  #   outbound:
+  #     type: activecampaign      # pushes contacts into AC; AC sends the email
+  #
+  #   sheets_id: "YOUR_SHEET_ID"  # separate sheet for dedup tracking
+  #
+  #   sender:                     # not rendered for AC outbound; kept for reference
+  #     name: "Your Team"
+  #     title: "Marketing"
+  #     email: "hello@yourcompany.com"
+  #
+  #   batches:
+  #     - label: "NUDGE"
+  #       max_emails_per_run: 500
+  #       list_id: "42"           # AC list ID — adding a contact here triggers the AC automation
+  #       query: |
+  #         SELECT u.email
+  #         FROM `{project}.{dataset}.users` AS u
+  #         JOIN `{project}.{dataset}.onboarded_users` AS o
+  #           ON u.user_id = o.user_id
+  #         WHERE NOT EXISTS (
+  #           SELECT 1 FROM `{project}.{dataset}.subscriptions` AS s
+  #           WHERE s.user_id = u.user_id
+  #         )
+  #         ORDER BY RAND()
+  #         LIMIT {limit}
+  #       # subject / body_text / body_html not needed — copy lives in ActiveCampaign

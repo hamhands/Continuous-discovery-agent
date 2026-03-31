@@ -1,0 +1,25 @@
+# Environment / secrets
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Google service account keys — never commit these
+*-service-account*.json
+*-credentials*.json
+service-account.json
+credentials.json
+
+# IDE
+.vscode/
+.idea/
+*.swp

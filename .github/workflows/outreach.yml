@@ -1,0 +1,55 @@
+name: Outreach Automation
+
+on:
+  schedule:
+    # 8:00 AM Pacific (16:00 UTC) weekdays
+    - cron: "0 16 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      outreach_profile:
+        description: "Profile name from config.yml (e.g. interview_outreach)"
+        required: false
+        default: "interview_outreach"
+      dry_run:
+        description: "Dry run (no emails sent, no sheet writes)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      test_email:
+        description: "Send only to this address (all batches), skips dedup"
+        required: false
+        default: ""
+
+jobs:
+  run-outreach:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run outreach script
+        env:
+          OUTREACH_PROFILE:              ${{ github.event.inputs.outreach_profile || 'interview_outreach' }}
+          CALENDLY_API_KEY:              ${{ secrets.CALENDLY_API_KEY }}
+          GMAIL_ADDRESS:                 ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD:            ${{ secrets.GMAIL_APP_PASSWORD }}
+          BIGQUERY_PROJECT:              ${{ secrets.BIGQUERY_PROJECT }}
+          BIGQUERY_DATASET:              ${{ secrets.BIGQUERY_DATASET }}
+          GOOGLE_SERVICE_ACCOUNT_JSON:   ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          SLACK_WEBHOOK_URL:             ${{ secrets.SLACK_WEBHOOK_URL }}
+          ACTIVECAMPAIGN_API_URL:        ${{ secrets.ACTIVECAMPAIGN_API_URL }}
+          ACTIVECAMPAIGN_API_KEY:        ${{ secrets.ACTIVECAMPAIGN_API_KEY }}
+          DRY_RUN:                       ${{ github.event.inputs.dry_run || 'false' }}
+          TEST_EMAIL:                    ${{ github.event.inputs.test_email }}
+        run: python main.py
