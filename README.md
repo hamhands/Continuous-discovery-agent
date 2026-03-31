@@ -109,7 +109,13 @@ Paste that value into `config.yml` as `event_slug`.
 
 ### Step 5: Configure your profile in `config.yml`
 
-Open `config.yml` and fill in the `interview_outreach` profile (or copy it to create a new one):
+**The easy way:** If you have [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed, open it in this repo and say:
+
+> "Help me configure the outreach agent"
+
+It will walk you through the full setup conversationally — Calendly link, sender details, BigQuery queries, email copy — and generate a ready-to-paste config block.
+
+**Or manually** — open `config.yml` and fill in the `interview_outreach` profile (or copy it to create a new one):
 
 ```yaml
 interview_outreach:
