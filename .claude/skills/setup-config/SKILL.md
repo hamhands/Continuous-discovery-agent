@@ -72,14 +72,16 @@ For each batch:
 **BigQuery query:** This is where most users will need the most help. Ask:
 - **What's your users table called in BigQuery?** (e.g., `users`, `accounts`, `customers`)
 - **What column has the user's email?** (usually `email`)
+- **What's the primary key / unique ID column in your users table?** (e.g., `id`, `user_id`). This is the column that milestone tables reference to link back to a user.
 - **What column has their signup date?** (e.g., `created_at`, `registered_at`)
 - **What milestone defines this segment?** Walk through the logic:
   - For "signed up but didn't do X": ask what table/event represents X
   - For "did A but not B": ask what tables/events represent A and B
   - For time windows: ask how recent the signup should be
+  - For each milestone table: confirm which column references the user (e.g., `user_id`, `account_id`)
 - **What's your company email domain?** (to exclude internal accounts)
 
-Then construct the query for them using `{project}`, `{dataset}`, and `{limit}` placeholders. Show it to them and ask if it looks right.
+Then construct the query for them using `{project}`, `{dataset}`, and `{limit}` placeholders. Use the actual column names they gave you — don't assume `u.id` or `m.user_id`. Show the query to them and ask if it looks right.
 
 **Email copy** (gmail outbound only):
 - **Subject line:** Ask them to write one. If they're stuck, suggest a pattern: "Quick question about [topic relevant to the milestone]"
@@ -88,7 +90,7 @@ Then construct the query for them using `{project}`, `{dataset}`, and `{limit}` 
   - Use `{calendly_link}` where the booking link should go (calendly capacity only)
   - The agent sends exactly what they write — no AI rewriting
   - Keep it short — 3-5 sentences works best for research outreach
-- Generate both `body_text` (plain text) and `body_html` (wrapped in `<p>` tags) from what they write.
+- Generate both `body_text` (plain text) and `body_html` from what they write. For `body_html`, split the text into logical paragraphs and wrap each in `<p>` tags. Replace the raw `{calendly_link}` placeholder with `<a href="{calendly_link}">Book a time here</a>`. For `body_text`, keep `{calendly_link}` as-is on its own line — it gets substituted with the URL at runtime.
 
 **ActiveCampaign** (AC outbound only):
 - Ask for the `list_id` — "What ActiveCampaign list ID should contacts be added to? You can find this in ActiveCampaign under Lists → click the list → the ID is in the URL."
@@ -98,8 +100,8 @@ Then construct the query for them using `{project}`, `{dataset}`, and `{limit}` 
 
 Once you have all the information, generate the complete profile block as valid YAML. Read the current `config.yml` first to see if there are existing profiles.
 
-- If the file only has the placeholder `interview_outreach` profile with `YOUR_` values, replace it entirely.
-- If there are real profiles already, add the new one alongside them.
+- If the file only has the placeholder `interview_outreach` profile with `YOUR_` values, replace the entire `profiles` block with the new profile. Keep the commented-out `marketing_nudge` example at the bottom — it's useful reference for users who want to add an AC profile later.
+- If there are real profiles already (values that aren't `YOUR_*` placeholders), add the new profile alongside them.
 
 Show the user the generated YAML and ask them to confirm before writing it to `config.yml`.
 
